@@ -449,7 +449,9 @@ fn setup_host_root_dirs(bwrap: &mut BwrapBuilder) -> anyhow::Result<()> {
                 continue;
             }
 
-            bwrap.bind(&entry_path, &entry_path);
+            if fs::exists(&entry_path).is_ok_and(|exists| exists) {
+                bwrap.bind(&entry_path, &entry_path);
+            }
         }
     }
 
