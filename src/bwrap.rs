@@ -3,6 +3,7 @@ use std::{
     ffi::OsStr,
     fs::File,
     io::{Seek, SeekFrom, Write},
+    iter,
     path::PathBuf,
     process::Command,
 };
@@ -117,6 +118,21 @@ impl BwrapBuilder {
         self.data.files.push(file);
 
         Ok(tempfile_path)
+    }
+
+    pub fn wrap_apparmor_unconfined(mut self) -> Self {
+        let args = ["-p", "unconfined"]
+            .into_iter()
+            .map(OsStr::new)
+            .chain(iter::once(self.command.get_program()))
+            .chain(self.command.get_args());
+
+        let mut new_cmd = Command::new("aa-exec");
+        new_cmd.args(args);
+
+        self.command = new_cmd;
+
+        self
     }
 
     pub fn finish(self) -> (Command, BwrapData) {

@@ -26,6 +26,10 @@ pub struct RunCommand {
     /// Additional Flatpak installation dirs (/var/lib/flatpak and $HOME/.local/share/flatpak are used by default)
     #[arg(long)]
     pub flatpak_install_path: Vec<PathBuf>,
+    /// When running on a system with AppArmor active, this makes sure the application runs with unconfined privileges.
+    /// It can be used to avoid applying unprivileged profiles normally intended for user Flatpak apps.
+    #[arg(default_value_t)]
+    pub apparmor_unconfined: bool,
     pub command: String,
     pub args: Vec<String>,
 }

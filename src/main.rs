@@ -169,6 +169,13 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
 
     setup_env(&mut bwrap, runtime_env, run.app.as_deref());
 
+    if run.apparmor_unconfined
+        && let Ok(current_profiles) = fs::read_to_string("/sys/kernel/security/apparmor/profiles")
+        && current_profiles.contains("(unconfined)")
+    {
+        bwrap = bwrap.wrap_apparmor_unconfined();
+    }
+
     // bwrap.bind_data("/etc/ld.so.cache", &[])?;
 
     let (mut cmd, _data) = bwrap.finish();
@@ -481,14 +488,14 @@ fn setup_env(bwrap: &mut BwrapBuilder, runtime_env: IndexMap<&str, &str>, app_id
         bwrap.set_env(env, value);
     }
 
-    if let Some(app) = app_id {
-        if let Ok(home) = env::var("HOME") {
-            let app_id_dir = Path::new(&home).join(".var").join("app").join(app);
-            bwrap.set_env("XDG_DATA_HOME", app_id_dir.join("data"));
-            bwrap.set_env("XDG_CONFIG_HOME", app_id_dir.join("config"));
-            bwrap.set_env("XDG_CACHE_HOME", app_id_dir.join("cache"));
-            bwrap.set_env("XDG_STATE_HOME", app_id_dir.join(".local").join("state"));
-        }
+    if let Some(app) = app_id
+        && let Ok(home) = env::var("HOME")
+    {
+        let app_id_dir = Path::new(&home).join(".var").join("app").join(app);
+        bwrap.set_env("XDG_DATA_HOME", app_id_dir.join("data"));
+        bwrap.set_env("XDG_CONFIG_HOME", app_id_dir.join("config"));
+        bwrap.set_env("XDG_CACHE_HOME", app_id_dir.join("cache"));
+        bwrap.set_env("XDG_STATE_HOME", app_id_dir.join(".local").join("state"));
     }
 }
 
