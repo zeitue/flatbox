@@ -346,7 +346,7 @@ fn setup_extension(
             continue;
         }
 
-        let full_extension_path = allowed_versions
+        if let Some(full_extension_path) = allowed_versions
             .split(';')
             .map(|version| {
                 Path::new(extension)
@@ -356,11 +356,11 @@ fn setup_extension(
                     .join("files")
             })
             .find_map(|path| find_install_path(path, false, install_dirs))
-            .context("Could not find extension install dir")?;
-
-        let extension_mount_path = extension_base_mount_path.join(extension_impl_name);
-        bwrap.ro_bind(&full_extension_path, &extension_mount_path);
-        mounted_paths.push((full_extension_path, extension_mount_path));
+        {
+            let extension_mount_path = extension_base_mount_path.join(extension_impl_name);
+            bwrap.ro_bind(&full_extension_path, &extension_mount_path);
+            mounted_paths.push((full_extension_path, extension_mount_path));
+        }
     }
 
     let mut existing_symlinks = HashSet::new();
