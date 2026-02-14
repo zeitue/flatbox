@@ -109,7 +109,7 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
         list_available_runtimes(&install_dirs).context("Could not list runtimes")?;
 
     let raw_app_metadata: Option<String>;
-    let (runtime, app_files_path) = match (&run.app, run.runtime) {
+    let (runtime, app_files_path, app_metadata) = match (&run.app, run.runtime) {
         (Some(app), None) => {
             let app_path = find_install_path(app, true, &install_dirs)
                 .context("Could not find app install dir")?
@@ -126,25 +126,19 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
             let app_runtime = app_metadata
                 .get("Application")
                 .and_then(|app| app.get("runtime"))
-                .context("Could not read app runtime")?;
+                .context("Could not read app runtime")?
+                .to_string();
 
             let app_files_path = app_path.join("files");
 
-            (app_runtime.to_string(), Some(app_files_path))
+            (app_runtime, Some(app_files_path), Some(app_metadata))
         }
         (None, Some(runtime)) => {
-            raw_app_metadata = None;
-            (runtime, None)
+            (runtime, None, None)
         }
         (Some(_), Some(_)) => bail!("Only app or runtime flags can be used at once"),
         (None, None) => bail!("Either app or runtime has to be specified"),
     };
-
-    let app_metadata = raw_app_metadata
-        .as_ref()
-        .map(|raw| parse_keyfile(raw))
-        .transpose()
-        .context("Could not parse app metadata")?;
 
     let runtime_path = find_install_path(&runtime, false, &install_dirs)
         .context("Could not find runtime install dir")?
