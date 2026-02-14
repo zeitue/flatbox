@@ -108,6 +108,7 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
     let available_runtimes =
         list_available_runtimes(&install_dirs).context("Could not list runtimes")?;
 
+    let raw_app_metadata: Option<String>;
     let (runtime, app_files_path) = match (&run.app, run.runtime) {
         (Some(app), None) => {
             let app_path = find_install_path(app, true, &install_dirs)
@@ -116,10 +117,11 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
                 .join("active");
             let app_metadata_path = app_path.join("metadata");
 
-            let raw_app_metadata =
-                fs::read_to_string(app_metadata_path).context("Could not read app metadata")?;
-            let app_metadata =
-                parse_keyfile(&raw_app_metadata).context("Could not parse app metadata")?;
+            raw_app_metadata = Some(
+                fs::read_to_string(app_metadata_path).context("Could not read app metadata")?,
+            );
+            let app_metadata = parse_keyfile(raw_app_metadata.as_ref().unwrap())
+                .context("Could not parse app metadata")?;
 
             let app_runtime = app_metadata
                 .get("Application")
@@ -130,10 +132,19 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
 
             (app_runtime.to_string(), Some(app_files_path))
         }
-        (None, Some(runtime)) => (runtime, None),
+        (None, Some(runtime)) => {
+            raw_app_metadata = None;
+            (runtime, None)
+        }
         (Some(_), Some(_)) => bail!("Only app or runtime flags can be used at once"),
         (None, None) => bail!("Either app or runtime has to be specified"),
     };
+
+    let app_metadata = raw_app_metadata
+        .as_ref()
+        .map(|raw| parse_keyfile(raw))
+        .transpose()
+        .context("Could not parse app metadata")?;
 
     let runtime_path = find_install_path(&runtime, false, &install_dirs)
         .context("Could not find runtime install dir")?
@@ -164,6 +175,15 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
         &available_runtimes,
         &install_dirs,
     )?;
+
+    if let Some(ref app_meta) = app_metadata {
+        setup_app_extensions(
+            &mut bwrap,
+            app_meta,
+            &available_runtimes,
+            &install_dirs,
+        )?;
+    }
 
     add_ld_so_conf(&mut bwrap)?;
 
@@ -283,8 +303,49 @@ fn setup_runtime_extensions(
                 version,
                 available_runtimes,
                 install_dirs,
+                Path::new("/usr"),
             )
             .with_context(|| format!("Could not set up extension {extension}"))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn setup_app_extensions(
+    bwrap: &mut BwrapBuilder,
+    app_metadata: &IndexMap<&str, IndexMap<&str, &str>>,
+    available_runtimes: &[String],
+    install_dirs: &[PathBuf],
+) -> anyhow::Result<()> {
+    let runtime = app_metadata
+        .get("Application")
+        .and_then(|app| app.get("runtime"))
+        .context("Missing app runtime spec")?;
+    let mut runtime_split = runtime.split('/').skip(1);
+    let arch = runtime_split
+        .next()
+        .context("Could not extract architecture from runtime id")?;
+
+    for (group, metadata) in app_metadata {
+        if let Some(extension) = group.strip_prefix(EXTENSION_PREFIX) {
+            let version = metadata
+                .get("version")
+                .or_else(|| metadata.get("versions"))
+                .copied()
+                .unwrap_or("master");
+
+            setup_extension(
+                metadata,
+                bwrap,
+                extension,
+                arch,
+                version,
+                available_runtimes,
+                install_dirs,
+                Path::new("/app"),
+            )
+            .with_context(|| format!("Could not set up app extension {extension}"))?;
         }
     }
 
@@ -299,13 +360,14 @@ fn setup_extension(
     runtime_version: &str,
     available_runtimes: &[String],
     install_dirs: &[PathBuf],
+    base_path: &Path,
 ) -> anyhow::Result<()> {
     let directory = extension_metadata
         .get("directory")
         .context("Missing directory")?;
 
     let expected_prefix = format!("{name}.");
-    let extension_base_mount_path = Path::new("/usr").join(directory);
+    let extension_base_mount_path = base_path.join(directory);
 
     let allowed_versions = extension_metadata
         .get("versions")
