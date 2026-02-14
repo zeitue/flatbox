@@ -174,6 +174,7 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
         setup_app_extensions(
             &mut bwrap,
             app_meta,
+            &runtime,
             &available_runtimes,
             &install_dirs,
         )?;
@@ -309,26 +310,20 @@ fn setup_runtime_extensions(
 fn setup_app_extensions(
     bwrap: &mut BwrapBuilder,
     app_metadata: &IndexMap<&str, IndexMap<&str, &str>>,
+    runtime: &str,
     available_runtimes: &[String],
     install_dirs: &[PathBuf],
 ) -> anyhow::Result<()> {
-    let runtime = app_metadata
-        .get("Application")
-        .and_then(|app| app.get("runtime"))
-        .context("Missing app runtime spec")?;
     let mut runtime_split = runtime.split('/').skip(1);
     let arch = runtime_split
         .next()
         .context("Could not extract architecture from runtime id")?;
+    let version = runtime_split
+        .next()
+        .context("Could not extract version from runtime id")?;
 
     for (group, metadata) in app_metadata {
         if let Some(extension) = group.strip_prefix(EXTENSION_PREFIX) {
-            let version = metadata
-                .get("version")
-                .or_else(|| metadata.get("versions"))
-                .copied()
-                .unwrap_or("master");
-
             setup_extension(
                 metadata,
                 bwrap,
