@@ -117,9 +117,8 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
                 .join("active");
             let app_metadata_path = app_path.join("metadata");
 
-            raw_app_metadata = Some(
-                fs::read_to_string(app_metadata_path).context("Could not read app metadata")?,
-            );
+            raw_app_metadata =
+                Some(fs::read_to_string(app_metadata_path).context("Could not read app metadata")?);
             let app_metadata = parse_keyfile(raw_app_metadata.as_ref().unwrap())
                 .context("Could not parse app metadata")?;
 
@@ -133,9 +132,7 @@ fn run(run: RunCommand, verbose: bool) -> anyhow::Result<ExitCode> {
 
             (app_runtime, Some(app_files_path), Some(app_metadata))
         }
-        (None, Some(runtime)) => {
-            (runtime, None, None)
-        }
+        (None, Some(runtime)) => (runtime, None, None),
         (Some(_), Some(_)) => bail!("Only app or runtime flags can be used at once"),
         (None, None) => bail!("Either app or runtime has to be specified"),
     };
@@ -488,7 +485,9 @@ fn setup_host_root_dirs(bwrap: &mut BwrapBuilder) -> anyhow::Result<()> {
                 continue;
             }
 
-            bwrap.bind(&entry_path, &entry_path);
+            if fs::exists(&entry_path).is_ok_and(|exists| exists) {
+                bwrap.bind(&entry_path, &entry_path);
+            }
         }
     }
 
